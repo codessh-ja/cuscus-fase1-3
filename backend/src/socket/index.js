@@ -13,22 +13,20 @@ export function createSocketServer(httpServer) {
   });
 
   // Wire Baileys events → socket broadcasts
-  waEvents.on('status', data  => { if (io) io.emit('wa:status', data); });
-  waEvents.on('qr',     data  => { if (io) io.emit('wa:qr', data); });
+  waEvents.on('status',            data => { if (io) io.emit('wa:status', data); });
+  waEvents.on('qr',                data => { if (io) io.emit('wa:qr', data); });
   waEvents.on('campaign:progress', data => { if (io) io.emit('campaign:progress', data); });
 
-  io.on('connection', socket => {
-    // Send current state to newly connected client
+  io.on('connection', async socket => {
     socket.emit('wa:status', getWAStatus());
-    socket.emit('drop:state', getDropState());
+    socket.emit('drop:state', await getDropState());
     const qr = getQR();
     if (qr) socket.emit('wa:qr', { qr });
 
-    // Admin sets drop state
-    socket.on('drop:set', ({ stage }) => {
+    socket.on('drop:set', async ({ stage }) => {
       if (stage !== 'pre_drop' && stage !== 'sold_out') return;
-      const state = setDropState(stage);
-      io.emit('drop:state', state); // broadcast to ALL clients (landing + admin)
+      const state = await setDropState(stage);
+      io.emit('drop:state', state);
     });
   });
 

@@ -2,6 +2,7 @@ import { createServer }     from 'http';
 import express             from 'express';
 import cors                from 'cors';
 import dotenv              from 'dotenv';
+import { connectDB }       from './db/connection.js';
 import registrationsRouter from './routes/registrations.js';
 import countdownRouter     from './routes/countdown.js';
 import campaignsRouter     from './routes/campaigns.js';
@@ -27,6 +28,13 @@ app.use('/api/drop',          dropRouter);
 
 createSocketServer(httpServer);
 
-httpServer.listen(PORT, () => {
-  console.log(`🎩 Cuscus Hats backend on http://localhost:${PORT}`);
-});
+connectDB()
+  .then(() => {
+    httpServer.listen(PORT, () => {
+      console.log(`🎩 Cuscus Hats backend on http://localhost:${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error('❌ Failed to connect to MongoDB:', err.message);
+    process.exit(1);
+  });

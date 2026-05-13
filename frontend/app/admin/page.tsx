@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const API_URL   = process.env.NEXT_PUBLIC_API_URL        || 'http://localhost:4000';
-const ADMIN_PWD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'cuscus2024';
+const API_URL    = process.env.NEXT_PUBLIC_API_URL        || 'http://localhost:4000';
+const ADMIN_PWD  = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'cuscus2024';
+const ADMIN_HDRS = { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_PWD };
 
 interface Reg { id: string; phone: string; created_at: string; }
 type Tab        = 'registros' | 'notificaciones';
@@ -126,7 +127,7 @@ export default function AdminPage() {
 
   const fetchRegs = useCallback(async () => {
     try {
-      const res  = await fetch(`${API_URL}/api/registrations`);
+      const res  = await fetch(`${API_URL}/api/registrations`, { headers: ADMIN_HDRS });
       const json = await res.json();
       setRegs(json.registrations ?? []);
     } catch {}
@@ -203,7 +204,7 @@ export default function AdminPage() {
     setSavingDate(true);
     try {
       await fetch(`${API_URL}/api/countdown`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: ADMIN_HDRS,
         body: JSON.stringify({ targetDate: currentDatetime }),
       });
       setSavedDatetime(currentDatetime);
@@ -256,7 +257,7 @@ export default function AdminPage() {
   async function deleteReg(regId: string) {
     setDeleting(regId);
     try {
-      await fetch(`${API_URL}/api/registrations/${regId}`, { method: 'DELETE' });
+      await fetch(`${API_URL}/api/registrations/${regId}`, { method: 'DELETE', headers: ADMIN_HDRS });
       setRegs(prev => prev.filter(r => r.id !== regId));
     } finally { setDeleting(null); }
   }

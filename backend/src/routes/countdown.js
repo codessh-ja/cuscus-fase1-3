@@ -1,49 +1,35 @@
 import { Router } from 'express';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import Config from '../models/Config.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../../../data');
-const COUNTDOWN_FILE = path.join(DATA_DIR, 'countdown.json');
+const KEY = 'countdown';
+const DEFAULT_MS = () => Date.now() + 14 * 24 * 60 * 60 * 1000;
 
-function getDefaultTarget() {
-  return Date.now() + 14 * 24 * 60 * 60 * 1000;
+async function getTargetDate() {
+  const doc = await Config.findOne({ key: KEY });
+  return doc ? doc.value.targetDate : DEFAULT_MS();
 }
 
-function ensureCountdownFile() {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  if (!existsSync(COUNTDOWN_FILE)) {
-    writeFileSync(
-      COUNTDOWN_FILE,
-      JSON.stringify({ targetDate: getDefaultTarget() }),
-      'utf-8'
-    );
-  }
-}
-
-// GET /api/countdown — get drop target date
-router.get('/', (_req, res) => {
-  ensureCountdownFile();
-  const data = JSON.parse(readFileSync(COUNTDOWN_FILE, 'utf-8'));
-  res.json({ targetDate: data.targetDate });
+// GET /api/countdown
+router.get('/', async (_req, res) => {
+  res.json({ targetDate: await getTargetDate() });
 });
 
-// PUT /api/countdown — update drop target date (admin)
-router.put('/', (req, res) => {
+// PUT /api/countdown  — admin only
+router.put('/', requireAdmin, async (req, res) => {
   const { targetDate } = req.body;
   const parsed = new Date(targetDate);
-  if (!targetDate || isNaN(parsed.getTime())) {
+  if (!targetDate || isNaN(parsed.getTime()))
     return res.status(400).json({ error: 'targetDate inválido' });
-  }
-  ensureCountdownFile();
-  writeFileSync(
-    COUNTDOWN_FILE,
-    JSON.stringify({ targetDate: parsed.getTime() }),
-    'utf-8'
+
+  const ts = parsed.getTime();
+  await Config.findOneAndUpdate(
+    { key: KEY },
+    { value: { targetDate: ts } },
+    { upsert: true }
   );
-  res.json({ targetDate: parsed.getTime() });
+  res.json({ targetDate: ts });
 });
 
 export default router;
