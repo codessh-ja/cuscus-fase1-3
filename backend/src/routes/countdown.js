@@ -8,7 +8,14 @@ const DEFAULT_MS = () => Date.now() + 14 * 24 * 60 * 60 * 1000;
 
 async function getTargetDate() {
   const doc = await Config.findOne({ key: KEY });
-  return doc ? doc.value.targetDate : DEFAULT_MS();
+  if (doc) return doc.value.targetDate;
+  const ts = DEFAULT_MS();
+  await Config.findOneAndUpdate(
+    { key: KEY },
+    { value: { targetDate: ts } },
+    { upsert: true }
+  );
+  return ts;
 }
 
 // GET /api/countdown

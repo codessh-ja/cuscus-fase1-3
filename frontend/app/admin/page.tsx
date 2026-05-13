@@ -9,6 +9,21 @@ const ADMIN_HDRS = { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN
 
 interface Reg { id: string; phone: string; created_at: string; }
 type Tab        = 'registros' | 'notificaciones';
+
+const DIAL_MAP: { dial: string; code: string }[] = [
+  { dial: '+593', code: 'ec' }, { dial: '+595', code: 'py' }, { dial: '+598', code: 'uy' },
+  { dial: '+591', code: 'bo' }, { dial: '+507', code: 'pa' }, { dial: '+506', code: 'cr' },
+  { dial: '+502', code: 'gt' }, { dial: '+504', code: 'hn' }, { dial: '+503', code: 'sv' },
+  { dial: '+505', code: 'ni' }, { dial: '+57',  code: 'co' }, { dial: '+52',  code: 'mx' },
+  { dial: '+54',  code: 'ar' }, { dial: '+56',  code: 'cl' }, { dial: '+51',  code: 'pe' },
+  { dial: '+58',  code: 've' }, { dial: '+55',  code: 'br' }, { dial: '+53',  code: 'cu' },
+  { dial: '+1',   code: 'us' },
+];
+
+function getFlagCode(phone: string): string | null {
+  const match = DIAL_MAP.find(({ dial }) => phone.startsWith(dial));
+  return match ? match.code : null;
+}
 type WAState    = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 type DropStage  = 'pre_drop' | 'sold_out';
 interface CampaignProgress { total: number; sent: number; failed: number; current: string | null; done: boolean; }
@@ -430,6 +445,9 @@ export default function AdminPage() {
                       style={{ animation: `fadeUp 0.2s ease forwards ${Math.min(i * 30, 250)}ms`, opacity: 0 }}>
                       <div className="flex items-center gap-4 min-w-0">
                         <span className="font-mono text-[9px] tabular-nums text-bone-3 opacity-30 w-6 text-right shrink-0">{filteredRegs.length - i}</span>
+                        {getFlagCode(r.phone) && (
+                          <img src={`https://flagcdn.com/w20/${getFlagCode(r.phone)}.png`} width="18" height="13" alt="" className="rounded-[2px] object-cover shrink-0 opacity-80" />
+                        )}
                         <span className="font-mono text-[14px] tracking-[0.06em] text-bone truncate">{r.phone}</span>
                       </div>
                       <div className="flex items-center gap-4 shrink-0">
