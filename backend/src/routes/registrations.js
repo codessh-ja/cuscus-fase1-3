@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import Registration from '../models/Registration.js';
 import { requireAdmin } from '../middleware/auth.js';
+import { getIO } from '../socket/index.js';
 
 const router = Router();
 
@@ -11,6 +12,8 @@ router.post('/', async (req, res) => {
 
   try {
     const reg = await Registration.create({ phone });
+    const io = getIO();
+    if (io) io.emit('registration:new', { id: reg._id.toString(), phone: reg.phone, created_at: reg.created_at });
     res.status(201).json({ message: 'Registrado exitosamente', id: reg._id });
   } catch (err) {
     if (err.code === 11000)

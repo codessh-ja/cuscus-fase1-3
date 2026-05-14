@@ -49,6 +49,69 @@ function exportCSV(data: Reg[]) {
   a.click();
 }
 
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+
+function RegistrationToast({ reg, onDismiss }: { reg: Reg; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 5000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  const flagCode = getFlagCode(reg.phone);
+
+  return (
+    <div
+      className="pointer-events-auto w-[290px] border border-[var(--line-strong)] flex overflow-hidden"
+      style={{
+        background: '#0e0e0e',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.85), 0 0 0 1px rgba(74,222,128,0.08)',
+        animation: 'toastIn 0.4s cubic-bezier(0.22,1,0.36,1) forwards',
+      }}
+    >
+      {/* Accent lateral */}
+      <div className="w-[3px] shrink-0" style={{ background: '#4ade80', boxShadow: '0 0 10px rgba(74,222,128,0.6)' }} />
+
+      <div className="flex-1 px-4 py-[14px] flex flex-col gap-[10px]">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-[7px]">
+            <span className="w-[6px] h-[6px] rounded-full shrink-0"
+              style={{ background: '#4ade80', boxShadow: '0 0 6px rgba(74,222,128,0.8)', animation: 'pulse 2s ease-in-out infinite' }} />
+            <span className="font-mono text-[8px] tracking-[0.46em] uppercase text-[#4ade80]">Nuevo registro</span>
+          </div>
+          <button onClick={onDismiss}
+            className="text-bone-3 hover:text-bone transition-colors duration-150 ml-2"
+            aria-label="Cerrar">
+            <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M1 1l10 10M11 1L1 11"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Teléfono */}
+        <div className="flex items-center gap-3">
+          {flagCode && (
+            <img src={`https://flagcdn.com/w20/${flagCode}.png`} width="18" height="13"
+              alt="" className="rounded-[2px] object-cover shrink-0 opacity-90" />
+          )}
+          <span className="font-mono text-[13px] tracking-[0.06em] text-bone">{reg.phone}</span>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[8px] tracking-[0.18em] uppercase text-bone-3">Ahora</span>
+          <span className="font-mono text-[8px] tracking-[0.2em] uppercase text-bone-3 opacity-40">WhatsApp</span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-[1px] w-full bg-[var(--line)] overflow-hidden">
+          <div className="h-full bg-[#4ade80] opacity-40" style={{ animation: 'toastProgress 5s linear forwards' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 
 function Login({ onAuth }: { onAuth: () => void }) {
@@ -139,6 +202,12 @@ export default function AdminPage() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [clearing, setClearing]     = useState(false);
 
+  // Toasts
+  const [toasts, setToasts] = useState<Reg[]>([]);
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   useEffect(() => {
     if (sessionStorage.getItem('cuscus_admin') === '1') setAuthed(true);
   }, []);
@@ -184,6 +253,11 @@ export default function AdminPage() {
     socket.on('campaign:progress', (p: CampaignProgress) => {
       setProgress(p);
       if (p.done) setSending(false);
+    });
+
+    socket.on('registration:new', (reg: Reg) => {
+      setRegs(prev => [reg, ...prev]);
+      setToasts(prev => [...prev, reg]);
     });
 
     return () => {
@@ -289,7 +363,7 @@ export default function AdminPage() {
     } finally { setClearing(false); }
   }
 
-  const filteredRegs = [...regs].reverse().filter(r => r.phone.includes(search));
+  const filteredRegs = [...regs].filter(r => r.phone.includes(search));
 
   if (!authed) return <Login onAuth={handleAuth} />;
 
@@ -718,9 +792,19 @@ export default function AdminPage() {
         </div>
       </main>
 
+      {/* Toast container */}
+      <div className="fixed bottom-6 right-6 z-[300] flex flex-col gap-3 pointer-events-none">
+        {toasts.map(t => (
+          <RegistrationToast key={t.id} reg={t} onDismiss={() => dismissToast(t.id)} />
+        ))}
+      </div>
+
       <style>{`
-        @keyframes spin   { to { transform: rotate(360deg); } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin         { to { transform: rotate(360deg); } }
+        @keyframes fadeUp       { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastIn      { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastProgress { from { width: 100%; } to { width: 0%; } }
+        @keyframes pulse        { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
     </div>
   );

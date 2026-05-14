@@ -1,31 +1,32 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, type FormEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+// local: [min, max] dígitos del número local (sin código de país)
 const COUNTRIES = [
-  { code: 'CO', name: 'Colombia',          dial: '+57'  },
-  { code: 'US', name: 'Estados Unidos',    dial: '+1'   },
-  { code: 'MX', name: 'México',            dial: '+52'  },
-  { code: 'AR', name: 'Argentina',         dial: '+54'  },
-  { code: 'CL', name: 'Chile',             dial: '+56'  },
-  { code: 'PE', name: 'Perú',              dial: '+51'  },
-  { code: 'VE', name: 'Venezuela',         dial: '+58'  },
-  { code: 'EC', name: 'Ecuador',           dial: '+593' },
-  { code: 'BO', name: 'Bolivia',           dial: '+591' },
-  { code: 'PY', name: 'Paraguay',          dial: '+595' },
-  { code: 'UY', name: 'Uruguay',           dial: '+598' },
-  { code: 'BR', name: 'Brasil',            dial: '+55'  },
-  { code: 'PA', name: 'Panamá',            dial: '+507' },
-  { code: 'CR', name: 'Costa Rica',        dial: '+506' },
-  { code: 'GT', name: 'Guatemala',         dial: '+502' },
-  { code: 'HN', name: 'Honduras',          dial: '+504' },
-  { code: 'SV', name: 'El Salvador',       dial: '+503' },
-  { code: 'NI', name: 'Nicaragua',         dial: '+505' },
-  { code: 'DO', name: 'Rep. Dominicana',   dial: '+1'   },
-  { code: 'CU', name: 'Cuba',              dial: '+53'  },
-  { code: 'PR', name: 'Puerto Rico',       dial: '+1'   },
+  { code: 'CO', name: 'Colombia',          dial: '+57',  local: [10, 10] },
+  { code: 'US', name: 'Estados Unidos',    dial: '+1',   local: [10, 10] },
+  { code: 'MX', name: 'México',            dial: '+52',  local: [10, 10] },
+  { code: 'AR', name: 'Argentina',         dial: '+54',  local: [10, 10] },
+  { code: 'CL', name: 'Chile',             dial: '+56',  local: [9,   9] },
+  { code: 'PE', name: 'Perú',              dial: '+51',  local: [9,   9] },
+  { code: 'VE', name: 'Venezuela',         dial: '+58',  local: [10, 10] },
+  { code: 'EC', name: 'Ecuador',           dial: '+593', local: [9,   9] },
+  { code: 'BO', name: 'Bolivia',           dial: '+591', local: [8,   8] },
+  { code: 'PY', name: 'Paraguay',          dial: '+595', local: [9,   9] },
+  { code: 'UY', name: 'Uruguay',           dial: '+598', local: [8,   9] },
+  { code: 'BR', name: 'Brasil',            dial: '+55',  local: [10, 11] },
+  { code: 'PA', name: 'Panamá',            dial: '+507', local: [8,   8] },
+  { code: 'CR', name: 'Costa Rica',        dial: '+506', local: [8,   8] },
+  { code: 'GT', name: 'Guatemala',         dial: '+502', local: [8,   8] },
+  { code: 'HN', name: 'Honduras',          dial: '+504', local: [8,   8] },
+  { code: 'SV', name: 'El Salvador',       dial: '+503', local: [8,   8] },
+  { code: 'NI', name: 'Nicaragua',         dial: '+505', local: [8,   8] },
+  { code: 'DO', name: 'Rep. Dominicana',   dial: '+1',   local: [10, 10] },
+  { code: 'CU', name: 'Cuba',              dial: '+53',  local: [8,   8] },
+  { code: 'PR', name: 'Puerto Rico',       dial: '+1',   local: [10, 10] },
 ];
 
 type Status = 'idle' | 'loading' | 'success' | 'error' | 'duplicate';
@@ -37,6 +38,51 @@ const LABELS: Record<Status, string> = {
   error:     'Error, reintenta',
   duplicate: 'En la lista ✓',
 };
+
+function SuccessModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', h); document.body.style.overflow = ''; };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-[400px] border border-[var(--line-strong)] bg-[#0c0c0c]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-[#0c0c0c] border-b border-[var(--line)] px-6 py-4 flex items-center justify-between">
+          <span className="font-mono text-[10px] tracking-[0.42em] text-bone uppercase">Registro exitoso</span>
+          <button onClick={onClose} className="w-7 h-7 border border-[var(--line)] grid place-items-center text-bone-3 hover:text-bone hover:border-[var(--line-strong)] transition-colors">
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1l10 10M11 1L1 11"/></svg>
+          </button>
+        </div>
+        <div className="px-6 py-8 flex flex-col items-center gap-6 text-center">
+          <div className="w-[42px] h-[42px] border border-[rgba(74,222,128,0.3)] grid place-items-center" style={{ background: 'rgba(74,222,128,0.06)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="1.8">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="font-gothic text-[22px] tracking-[0.1em] uppercase text-bone leading-none">¡Estás en la lista!</p>
+            <p className="font-mono text-[9px] tracking-[0.18em] text-bone-3 leading-[1.9] uppercase">
+              Te avisaremos por WhatsApp<br />cuando el drop esté disponible.
+            </p>
+          </div>
+          <button onClick={onClose} className="h-[42px] w-full bg-bone text-ink font-mono text-[10px] tracking-[0.36em] uppercase hover:bg-transparent hover:text-bone border border-bone transition-all duration-200">
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DuplicateModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
@@ -70,6 +116,52 @@ function DuplicateModal({ onClose }: { onClose: () => void }) {
             <p className="font-gothic text-[22px] tracking-[0.1em] uppercase text-bone leading-none">Ya estás en la lista</p>
             <p className="font-mono text-[9px] tracking-[0.18em] text-bone-3 leading-[1.9] uppercase">
               Este número ya fue registrado.<br />Te avisaremos cuando el drop esté disponible.
+            </p>
+          </div>
+          <button onClick={onClose} className="h-[42px] w-full bg-bone text-ink font-mono text-[10px] tracking-[0.36em] uppercase hover:bg-transparent hover:text-bone border border-bone transition-all duration-200">
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvalidPhoneModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', h); document.body.style.overflow = ''; };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-[400px] border border-[var(--line-strong)] bg-[#0c0c0c]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-[#0c0c0c] border-b border-[var(--line)] px-6 py-4 flex items-center justify-between">
+          <span className="font-mono text-[10px] tracking-[0.42em] text-bone uppercase">Número inválido</span>
+          <button onClick={onClose} className="w-7 h-7 border border-[var(--line)] grid place-items-center text-bone-3 hover:text-bone hover:border-[var(--line-strong)] transition-colors">
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1l10 10M11 1L1 11"/></svg>
+          </button>
+        </div>
+        <div className="px-6 py-8 flex flex-col items-center gap-6 text-center">
+          <div className="w-[42px] h-[42px] border border-[rgba(251,191,36,0.3)] grid place-items-center" style={{ background: 'rgba(251,191,36,0.06)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="1.8">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="font-gothic text-[22px] tracking-[0.1em] uppercase text-bone leading-none">Formato inválido</p>
+            <p className="font-mono text-[9px] tracking-[0.18em] text-bone-3 leading-[1.9] uppercase">
+              Ingresa solo los dígitos del número,<br />sin código de país ni espacios.<br />Ej: 3123456789
             </p>
           </div>
           <button onClick={onClose} className="h-[42px] w-full bg-bone text-ink font-mono text-[10px] tracking-[0.36em] uppercase hover:bg-transparent hover:text-bone border border-bone transition-all duration-200">
@@ -135,12 +227,38 @@ export default function SignupForm() {
   const [country, setCountry]         = useState(COUNTRIES[0]);
   const [open, setOpen]               = useState(false);
   const [query, setQuery]             = useState('');
-  const [showPrivacy, setShowPrivacy]     = useState(false);
-  const [showDuplicate, setShowDuplicate] = useState(false);
-  const wrapperRef                        = useRef<HTMLDivElement>(null);
-  const searchRef                         = useRef<HTMLInputElement>(null);
-  const closePrivacy   = useCallback(() => setShowPrivacy(false), []);
-  const closeDuplicate = useCallback(() => setShowDuplicate(false), []);
+  const [phoneInput, setPhoneInput]           = useState('');
+  const [showSuccess, setShowSuccess]           = useState(false);
+  const [showPrivacy, setShowPrivacy]           = useState(false);
+  const [showDuplicate, setShowDuplicate]       = useState(false);
+  const [showInvalidPhone, setShowInvalidPhone] = useState(false);
+  const wrapperRef                            = useRef<HTMLDivElement>(null);
+  const searchRef                             = useRef<HTMLInputElement>(null);
+  const closeSuccess      = useCallback(() => setShowSuccess(false), []);
+  const closePrivacy      = useCallback(() => setShowPrivacy(false), []);
+  const closeDuplicate    = useCallback(() => setShowDuplicate(false), []);
+  const closeInvalidPhone = useCallback(() => setShowInvalidPhone(false), []);
+
+  function handlePhoneInput(raw: string) {
+    // Solo dígitos — quitamos todo lo demás mientras el usuario escribe
+    setPhoneInput(raw.replace(/\D/g, ''));
+  }
+
+  function buildAndValidatePhone(): string | null {
+    const dialDigits = country.dial.replace('+', ''); // e.g. "57"
+    let digits = phoneInput.replace(/\D/g, '');
+
+    // Quitar prefijo duplicado: si el usuario escribió el código de país
+    if (digits.startsWith(dialDigits) && digits.length > dialDigits.length) {
+      digits = digits.slice(dialDigits.length);
+    }
+
+    // Validar longitud según el país seleccionado
+    const [min, max] = country.local;
+    if (digits.length < min || digits.length > max) return null;
+
+    return country.dial + digits;
+  }
 
   const filtered = query.trim()
     ? COUNTRIES.filter(c => c.name.toLowerCase().includes(query.toLowerCase()) || c.dial.includes(query))
@@ -158,18 +276,21 @@ export default function SignupForm() {
     return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', esc); };
   }, []);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
     if (status === 'loading') return;
+
+    const phone = buildAndValidatePhone();
+    if (!phone) { setShowInvalidPhone(true); return; }
+
     setStatus('loading');
-    const data = { phone: country.dial + (e.currentTarget.elements.namedItem('phone') as HTMLInputElement).value };
     try {
       const res = await fetch(`${API_URL}/api/registrations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ phone }),
       });
-      if (res.status === 201)      setStatus('success');
+      if (res.status === 201)      { setStatus('success'); setPhoneInput(''); setShowSuccess(true); }
       else if (res.status === 409) { setStatus('duplicate'); setShowDuplicate(true); }
       else                         setStatus('error');
     } catch { setStatus('error'); }
@@ -180,8 +301,10 @@ export default function SignupForm() {
 
   return (
     <>
-      {showPrivacy   && <PrivacyModal   onClose={closePrivacy} />}
-      {showDuplicate && <DuplicateModal onClose={closeDuplicate} />}
+      {showSuccess      && <SuccessModal      onClose={closeSuccess} />}
+      {showPrivacy      && <PrivacyModal      onClose={closePrivacy} />}
+      {showDuplicate    && <DuplicateModal    onClose={closeDuplicate} />}
+      {showInvalidPhone && <InvalidPhoneModal onClose={closeInvalidPhone} />}
       <form onSubmit={handleSubmit} className="w-full max-w-[480px] flex flex-col gap-[6px] sm:gap-[8px]" autoComplete="off">
 
         {/* Header */}
@@ -208,9 +331,11 @@ export default function SignupForm() {
           <input
             type="tel"
             name="phone"
-            placeholder="Número de WhatsApp"
-            inputMode="tel"
+            placeholder="Ej: 3123456789"
+            inputMode="numeric"
             required
+            value={phoneInput}
+            onChange={e => handlePhoneInput(e.target.value)}
             className="flex-1 bg-transparent border-0 outline-none text-bone py-0 px-3 h-[44px] tracking-[0.18em] font-mono placeholder:text-bone-3 placeholder:tracking-[0.12em] min-w-0"
             style={{ fontSize: '16px', zoom: 0.75 }}
           />
