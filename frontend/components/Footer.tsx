@@ -5,7 +5,7 @@ export default function Footer() {
         {/* Instagram */}
         <a
           className="flex items-center gap-[7px] font-mono tracking-[0.14em] uppercase hover:text-bone transition-colors"
-          href="https://instagram.com/mario_cv00"
+          href="https://instagram.com/cuscus_hats"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -16,7 +16,7 @@ export default function Footer() {
               <circle cx="17.5" cy="6.5" r="1" fill="currentColor" />
             </svg>
           </span>
-          <span className="text-[8px] sm:text-[9px]">@mario_cv00</span>
+          <span className="text-[8px] sm:text-[9px]">@cuscus_hats</span>
         </a>
 
         {/* TikTok */}
