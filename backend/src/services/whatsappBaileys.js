@@ -17,15 +17,24 @@ let currentQR         = null;
 let state             = 'disconnected';
 let reconnectAttempts = 0;
 let autoReconnect     = true;
+let campaignRunning   = false;
 
 function emit(event, data) {
   waEvents.emit(event, data);
 }
 
-export function getStatus() { return { state, hasQR: !!currentQR }; }
-export function getQR()     { return currentQR; }
+function randomDelay(min = 3000, max = 5500) {
+  return new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min));
+}
+
+export function getStatus()   { return { state, hasQR: !!currentQR }; }
+export function getQR()       { return currentQR; }
+export function isCampaignRunning() { return campaignRunning; }
 
 export async function connect() {
+  // Guard: no crear socket si ya está conectando o conectado
+  if (state === 'connected' || state === 'connecting') return;
+
   if (!existsSync(AUTH_DIR)) mkdirSync(AUTH_DIR, { recursive: true });
 
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -41,8 +50,9 @@ export async function connect() {
     printQRInTerminal:     false,
     browser:               Browsers.ubuntu('Chrome'),
     logger,
-    connectTimeoutMs:      30000,
-    defaultQueryTimeoutMs: 30000,
+    connectTimeoutMs:      60000,
+    defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs:   25000,
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -67,22 +77,31 @@ export async function connect() {
       const code      = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = code === DisconnectReason.loggedOut;
 
+      sock = null;
+
       if (loggedOut || !autoReconnect) {
+        // Limpiar sesión para que el próximo connect() genere QR limpio
+        clearSession();
         state     = 'disconnected';
         currentQR = null;
-        sock      = null;
         emit('status', { state, hasQR: false });
-        console.log('🔴 WhatsApp desconectado');
+        console.log('🔴 WhatsApp desconectado (sesión cerrada)');
       } else {
         state = 'reconnecting';
         emit('status', { state, hasQR: false });
         reconnectAttempts++;
         const delay = Math.min(3000 * reconnectAttempts, 30000);
-        console.log(`🟡 Reconectando en ${delay}ms...`);
+        console.log(`🟡 Reconectando en ${delay}ms... (intento ${reconnectAttempts})`);
         setTimeout(connect, delay);
       }
     }
   });
+}
+
+function clearSession() {
+  if (existsSync(AUTH_DIR)) {
+    try { rmSync(AUTH_DIR, { recursive: true, force: true }); } catch {}
+  }
 }
 
 export async function disconnect() {
@@ -91,9 +110,9 @@ export async function disconnect() {
     try { await sock.logout(); } catch {}
     sock = null;
   }
-  if (existsSync(AUTH_DIR)) rmSync(AUTH_DIR, { recursive: true, force: true });
-  state     = 'disconnected';
-  currentQR = null;
+  clearSession();
+  state             = 'disconnected';
+  currentQR         = null;
   reconnectAttempts = 0;
   emit('status', { state, hasQR: false });
 }
@@ -111,23 +130,41 @@ export async function sendMessage(phone, template) {
 }
 
 export async function sendCampaign(phones, template) {
-  const results = { sent: 0, failed: 0, errors: [] };
-  const total   = phones.length;
+  if (campaignRunning) throw new Error('Ya hay una campaña en curso');
+
+  campaignRunning = true;
+  const results   = { sent: 0, failed: 0, errors: [] };
+  const total     = phones.length;
 
   emit('campaign:progress', { total, sent: 0, failed: 0, current: null, done: false });
 
-  for (const phone of phones) {
-    emit('campaign:progress', { total, sent: results.sent, failed: results.failed, current: phone, done: false });
-    try {
-      await sendMessage(phone, template);
-      results.sent++;
-      await new Promise(r => setTimeout(r, 1200));
-    } catch (err) {
-      results.failed++;
-      results.errors.push({ phone, error: err.message });
+  try {
+    for (const phone of phones) {
+      // Detener si WhatsApp se desconecta durante la campaña
+      if (state !== 'connected') {
+        results.errors.push({ phone: 'N/A', error: 'WhatsApp desconectado durante la campaña' });
+        break;
+      }
+
+      emit('campaign:progress', { total, sent: results.sent, failed: results.failed, current: phone, done: false });
+
+      try {
+        await sendMessage(phone, template);
+        results.sent++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push({ phone, error: err.message });
+      }
+
+      // Delay aleatorio entre 3s y 5.5s para evitar detección de spam
+      if (phones.indexOf(phone) < phones.length - 1) {
+        await randomDelay(3000, 5500);
+      }
     }
+  } finally {
+    campaignRunning = false;
+    emit('campaign:progress', { total, sent: results.sent, failed: results.failed, current: null, done: true });
   }
 
-  emit('campaign:progress', { total, sent: results.sent, failed: results.failed, current: null, done: true });
   return results;
 }
