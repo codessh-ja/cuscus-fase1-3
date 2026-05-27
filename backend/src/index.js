@@ -8,6 +8,7 @@ import countdownRouter     from './routes/countdown.js';
 import campaignsRouter     from './routes/campaigns.js';
 import whatsappRouter      from './routes/whatsapp.js';
 import dropRouter          from './routes/drop.js';
+import twilioRouter        from './routes/twilio.js';
 import { createSocketServer } from './socket/index.js';
 
 dotenv.config();
@@ -18,6 +19,7 @@ const PORT       = process.env.PORT || 4000;
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // required for Twilio webhook (form-encoded)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api/registrations', registrationsRouter);
@@ -25,6 +27,7 @@ app.use('/api/countdown',     countdownRouter);
 app.use('/api/campaigns',     campaignsRouter);
 app.use('/api/whatsapp',      whatsappRouter);
 app.use('/api/drop',          dropRouter);
+app.use('/api/twilio',        twilioRouter);
 
 createSocketServer(httpServer);
 

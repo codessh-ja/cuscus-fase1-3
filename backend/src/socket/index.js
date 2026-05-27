@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import { getDropState, setDropState } from '../state/dropState.js';
 import { getStatus as getWAStatus, getQR, waEvents } from '../services/whatsappBaileys.js';
+import { twilioEvents } from '../services/twilioWhatsapp.js';
 
 let io = null;
 
@@ -16,6 +17,11 @@ export function createSocketServer(httpServer) {
   waEvents.on('status',            data => { if (io) io.emit('wa:status', data); });
   waEvents.on('qr',                data => { if (io) io.emit('wa:qr', data); });
   waEvents.on('campaign:progress', data => { if (io) io.emit('campaign:progress', data); });
+
+  // Wire Twilio events → socket broadcasts
+  twilioEvents.on('twilio:campaign:start',    data => { if (io) io.emit('twilio:campaign:start',    data); });
+  twilioEvents.on('twilio:campaign:progress', data => { if (io) io.emit('twilio:campaign:progress', data); });
+  twilioEvents.on('twilio:campaign:done',     data => { if (io) io.emit('twilio:campaign:done',     data); });
 
   io.on('connection', async socket => {
     socket.emit('wa:status', getWAStatus());
