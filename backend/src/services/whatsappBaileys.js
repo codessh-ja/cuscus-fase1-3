@@ -27,16 +27,26 @@ function randomDelay(min = 3000, max = 5500) {
   return new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min));
 }
 
-// Delay humanizado con distribución realista
-// Simula que una persona real está enviando mensajes desde su celular
+// Delay humanizado — promedio ~26s → 300 mensajes caben en ~2.5–3h
 function humanDelay() {
   const r = Math.random();
   let ms;
-  if      (r < 0.55) ms = 8000  + Math.random() * 17000;  // 55%: 8–25s  (ritmo normal)
-  else if (r < 0.80) ms = 25000 + Math.random() * 35000;  // 25%: 25–60s (se distrajo un momento)
-  else if (r < 0.93) ms = 60000 + Math.random() * 90000;  // 13%: 1–2.5 min (tomó un break corto)
-  else               ms = 150000 + Math.random() * 120000; //  7%: 2.5–4.5 min (se fue un rato)
+  if      (r < 0.60) ms = 8000  + Math.random() * 12000;  // 60%: 8–20s  (ritmo normal)
+  else if (r < 0.85) ms = 20000 + Math.random() * 20000;  // 25%: 20–40s (se distrajo)
+  else if (r < 0.97) ms = 40000 + Math.random() * 35000;  // 12%: 40–75s (break corto)
+  else               ms = 75000 + Math.random() * 45000;  //  3%: 75–120s (break largo)
   return new Promise(r => setTimeout(r, Math.floor(ms)));
+}
+
+// Verifica si un número está registrado en WhatsApp antes de intentar enviar
+async function isOnWhatsApp(cleaned) {
+  if (!sock) return true; // si no hay socket, intentar igual
+  try {
+    const [result] = await sock.onWhatsApp(cleaned);
+    return result?.exists === true;
+  } catch {
+    return true; // ante error de red, intentar enviar
+  }
 }
 
 // Simula que el remitente está escribiendo antes de enviar
@@ -166,68 +176,70 @@ export async function sendCampaign(phones, template) {
   if (campaignRunning) throw new Error('Ya hay una campaña en curso');
 
   campaignRunning = true;
-  const results   = { sent: 0, failed: 0, errors: [] };
+  const results = { sent: 0, failed: 0, skipped: 0, errors: [] };
 
-  // Mezclar el orden para que no sea secuencial (más humano)
+  // Mezclar orden para que no sea secuencial (más humano)
   const shuffled = [...phones].sort(() => Math.random() - 0.5);
   const total    = shuffled.length;
 
-  // Tamaño de lote variable: cada 20–35 mensajes se toma un descanso largo
-  let nextBatchBreak = 20 + Math.floor(Math.random() * 16);
+  // Pausa larga cada 40–55 mensajes (menos frecuente, más natural)
+  let nextBatchBreak = 40 + Math.floor(Math.random() * 16);
 
-  emit('campaign:progress', { total, sent: 0, failed: 0, current: null, done: false });
+  emit('campaign:progress', { total, sent: 0, failed: 0, skipped: 0, current: null, done: false });
   console.log(`📤 Campaña iniciada — ${total} números, pausa larga cada ~${nextBatchBreak} mensajes`);
 
   try {
     for (let i = 0; i < shuffled.length; i++) {
       const phone = shuffled[i];
 
-      // Detener si WhatsApp se desconecta durante la campaña
       if (state !== 'connected') {
         results.errors.push({ phone: 'N/A', error: 'WhatsApp desconectado durante la campaña' });
         break;
       }
 
       emit('campaign:progress', {
-        total,
-        sent:    results.sent,
-        failed:  results.failed,
-        current: phone,
-        done:    false,
+        total, sent: results.sent, failed: results.failed,
+        skipped: results.skipped, current: phone, done: false,
       });
 
+      const cleaned = phone.replace(/[^\d]/g, '');
+      const jid     = `${cleaned}@s.whatsapp.net`;
+
+      // Verificar si el número existe en WhatsApp — si no, ignorarlo
+      const exists = await isOnWhatsApp(cleaned);
+      if (!exists) {
+        results.skipped++;
+        console.log(`⏭️  [${i + 1}/${total}] Ignorado (no está en WhatsApp): ${phone}`);
+        continue; // sin delay, pasar al siguiente
+      }
+
       try {
-        const cleaned = phone.replace(/[^\d]/g, '');
-        const jid     = `${cleaned}@s.whatsapp.net`;
-        const text    = interpolate(template, { phone: cleaned });
+        const text = interpolate(template, { phone: cleaned });
 
-        // Simular que está escribiendo antes de enviar
         await simulateTyping(jid, text.length);
-
         await sock.sendMessage(jid, { text });
         results.sent++;
-        console.log(`✅ [${results.sent}/${total}] Enviado a ${phone}`);
+        console.log(`✅ [${results.sent + results.failed}/${total}] Enviado a ${phone}`);
       } catch (err) {
         results.failed++;
         results.errors.push({ phone, error: err.message });
-        console.log(`❌ [${i + 1}/${total}] Error en ${phone}: ${err.message}`);
+        console.log(`❌ Error en ${phone}: ${err.message}`);
       }
 
       const isLast = i === shuffled.length - 1;
       if (isLast) break;
 
-      // Pausa larga al completar un lote (simula que dejó el teléfono)
+      // Pausa larga de lote (simula dejar el teléfono)
       if ((i + 1) === nextBatchBreak) {
-        const breakMs = 4 * 60000 + Math.random() * 6 * 60000; // 4–10 minutos
+        const breakMs = 2 * 60000 + Math.random() * 3 * 60000; // 2–5 minutos
         console.log(`☕ Pausa de lote tras ${i + 1} mensajes — ${Math.round(breakMs / 60000)} min`);
         emit('campaign:progress', {
           total, sent: results.sent, failed: results.failed,
-          current: null, done: false, paused: true,
+          skipped: results.skipped, current: null, done: false, paused: true,
         });
         await new Promise(r => setTimeout(r, Math.floor(breakMs)));
-        nextBatchBreak += 20 + Math.floor(Math.random() * 16); // próximo lote
+        nextBatchBreak += 40 + Math.floor(Math.random() * 16);
       } else {
-        // Delay humanizado entre mensajes
         await humanDelay();
       }
     }
@@ -235,9 +247,9 @@ export async function sendCampaign(phones, template) {
     campaignRunning = false;
     emit('campaign:progress', {
       total, sent: results.sent, failed: results.failed,
-      current: null, done: true,
+      skipped: results.skipped, current: null, done: true,
     });
-    console.log(`🏁 Campaña finalizada — ${results.sent} enviados, ${results.failed} fallidos`);
+    console.log(`🏁 Campaña finalizada — ${results.sent} enviados, ${results.failed} fallidos, ${results.skipped} ignorados (sin WhatsApp)`);
   }
 
   return results;
