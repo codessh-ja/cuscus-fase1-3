@@ -27,46 +27,62 @@ function randomDelay(min = 3000, max = 5500) {
   return new Promise(r => setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min));
 }
 
-// Delay humanizado — promedio ~26s → 300 mensajes caben en ~2.5–3h
+// Delay humanizado anti-ban — promedio ~70s → 300 mensajes en ~7-8h (máxima protección)
+// Distribución irregular que imita comportamiento humano real al enviar mensajes
 function humanDelay() {
   const r = Math.random();
   let ms;
-  if      (r < 0.60) ms = 8000  + Math.random() * 12000;  // 60%: 8–20s  (ritmo normal)
-  else if (r < 0.85) ms = 20000 + Math.random() * 20000;  // 25%: 20–40s (se distrajo)
-  else if (r < 0.97) ms = 40000 + Math.random() * 35000;  // 12%: 40–75s (break corto)
-  else               ms = 75000 + Math.random() * 45000;  //  3%: 75–120s (break largo)
+  if      (r < 0.50) ms = 15000 + Math.random() * 20000;  // 50%: 15–35s  (escribe con calma)
+  else if (r < 0.75) ms = 35000 + Math.random() * 40000;  // 25%: 35–75s  (revisó algo antes)
+  else if (r < 0.90) ms = 75000 + Math.random() * 75000;  // 15%: 75–150s (break corto)
+  else if (r < 0.97) ms = 150000 + Math.random() * 210000; //  7%: 2.5–6 min (se fue un rato)
+  else               ms = 360000 + Math.random() * 240000; //  3%: 6–10 min (descanso largo)
   return new Promise(r => setTimeout(r, Math.floor(ms)));
 }
 
 // Verifica si un número está registrado en WhatsApp antes de intentar enviar
 async function isOnWhatsApp(cleaned) {
-  if (!sock) return true; // si no hay socket, intentar igual
+  if (!sock) return true;
   try {
     const [result] = await sock.onWhatsApp(cleaned);
     return result?.exists === true;
   } catch {
-    return true; // ante error de red, intentar enviar
+    return true;
   }
 }
 
-// Simula que el remitente está escribiendo antes de enviar
+// Simula comportamiento humano completo antes de enviar:
+// aparece online → pausa → escribe → para → revisa → envía
 async function simulateTyping(jid, messageLength) {
   if (!sock) return;
   try {
-    // Marcar como disponible primero
+    // Aparece online como si abriera la app
     await sock.sendPresenceUpdate('available', jid);
-    await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 1200));
 
-    // "Escribiendo..." — duración proporcional al largo del mensaje
-    const typingMs = Math.min(4000, Math.max(1200, messageLength * 18 + Math.random() * 800));
+    // A veces "piensa" antes de escribir (30% de veces)
+    if (Math.random() < 0.30) {
+      await new Promise(r => setTimeout(r, 1500 + Math.random() * 3000));
+    }
+
+    // Empieza a escribir — duración proporcional al mensaje
+    const typingMs = Math.min(6000, Math.max(2000, messageLength * 22 + Math.random() * 1500));
     await sock.sendPresenceUpdate('composing', jid);
     await new Promise(r => setTimeout(r, Math.floor(typingMs)));
 
-    // Pausa breve antes de enviar (como cuando uno revisa el mensaje)
+    // A veces "para de escribir" y vuelve (20% — como cuando uno borra y reescribe)
+    if (Math.random() < 0.20) {
+      await sock.sendPresenceUpdate('paused', jid);
+      await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
+      await sock.sendPresenceUpdate('composing', jid);
+      await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
+    }
+
+    // Pausa final — está revisando el mensaje antes de enviarlo
     await sock.sendPresenceUpdate('paused', jid);
-    await new Promise(r => setTimeout(r, 300 + Math.random() * 500));
+    await new Promise(r => setTimeout(r, 500 + Math.random() * 1000));
   } catch {
-    // No bloquear el envío si falla la simulación de presencia
+    // No bloquear el envío si falla la presencia
   }
 }
 
@@ -182,8 +198,8 @@ export async function sendCampaign(phones, template) {
   const shuffled = [...phones].sort(() => Math.random() - 0.5);
   const total    = shuffled.length;
 
-  // Pausa larga cada 40–55 mensajes (menos frecuente, más natural)
-  let nextBatchBreak = 40 + Math.floor(Math.random() * 16);
+  // Pausa larga cada 20–30 mensajes — lotes pequeños, máxima protección
+  let nextBatchBreak = 20 + Math.floor(Math.random() * 11);
 
   emit('campaign:progress', { total, sent: 0, failed: 0, skipped: 0, current: null, done: false });
   console.log(`📤 Campaña iniciada — ${total} números, pausa larga cada ~${nextBatchBreak} mensajes`);
@@ -229,16 +245,16 @@ export async function sendCampaign(phones, template) {
       const isLast = i === shuffled.length - 1;
       if (isLast) break;
 
-      // Pausa larga de lote (simula dejar el teléfono)
+      // Pausa larga de lote — simula que dejó el celular un buen rato
       if ((i + 1) === nextBatchBreak) {
-        const breakMs = 2 * 60000 + Math.random() * 3 * 60000; // 2–5 minutos
+        const breakMs = 8 * 60000 + Math.random() * 7 * 60000; // 8–15 minutos
         console.log(`☕ Pausa de lote tras ${i + 1} mensajes — ${Math.round(breakMs / 60000)} min`);
         emit('campaign:progress', {
           total, sent: results.sent, failed: results.failed,
           skipped: results.skipped, current: null, done: false, paused: true,
         });
         await new Promise(r => setTimeout(r, Math.floor(breakMs)));
-        nextBatchBreak += 40 + Math.floor(Math.random() * 16);
+        nextBatchBreak += 20 + Math.floor(Math.random() * 11);
       } else {
         await humanDelay();
       }
